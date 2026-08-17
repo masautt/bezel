@@ -364,14 +364,14 @@ app.whenReady().then(async () => {
   // newest-transcript heuristic remains the best available reading.
   ipcMain.handle('context:meter', (_e, cwd: string, sessionId?: string) => readContextMeter(HOME, cwd, Date.now(), sessionId))
 
-  ipcMain.handle('specs:list', (_e, org: string, project: string) => listSpecs(ORGS_ROOT, org, project))
+  ipcMain.handle('specs:list', (_e, org: string, project: string) => listSpecs(org, project))
 
   // Opening a spec is a filesystem question — is the generated .html on this box? —
   // and the renderer has no filesystem access, so the decision lives here rather
   // than in the widget. shell.openPath hands the local file to the default browser,
   // which RENDERS it; GitHub's blob view would show the HTML as source.
   ipcMain.handle('specs:open', async (_e, org: string, htmlPath: string) => {
-    const target = resolveSpecTarget(org, htmlPath, readSpecsRegistry(ORGS_ROOT), existsSync)
+    const target = resolveSpecTarget(org, htmlPath, readSpecsRegistry(), existsSync)
     if (target.kind === 'local') await shell.openPath(target.path)
     else await shell.openExternal(target.url)
     return target.kind
@@ -472,11 +472,11 @@ app.whenReady().then(async () => {
   // this only once its panes are alive: anything it sends while main is inside a
   // synchronous nodePty.spawn queues behind it, so a pull issued during the
   // loading screen could not answer until the loading screen was already gone.
-  ipcMain.handle('loading:pull', () => pullLoadingMessages(ORGS_ROOT))
+  ipcMain.handle('loading:pull', () => pullLoadingMessages())
 
-  ipcMain.handle('presets:pull', () => pullPresets(ORGS_ROOT))
-  ipcMain.handle('presets:push', (_e, presets: LayoutPreset[]) => pushPresets(ORGS_ROOT, presets))
-  ipcMain.handle('presets:tombstone', (_e, id: string, now: string) => tombstonePreset(ORGS_ROOT, id, now))
+  ipcMain.handle('presets:pull', () => pullPresets())
+  ipcMain.handle('presets:push', (_e, presets: LayoutPreset[]) => pushPresets(presets))
+  ipcMain.handle('presets:tombstone', (_e, id: string, now: string) => tombstonePreset(id, now))
 
   ipcMain.handle('shell:openExternal', (_e, url: string) => {
     if (typeof url === 'string' && /^https?:\/\//.test(url)) return shell.openExternal(url)

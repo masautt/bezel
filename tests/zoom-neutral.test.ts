@@ -23,18 +23,25 @@ describe('bezel zoom neutral', () => {
   // ignored (an unknown option on a plain object) and bezel drops back to 100% with no
   // error anywhere. Same for the renderer half in @devkit-inc/react-ui 1.18.0+, which is
   // what hides the zoom indicator at 125% instead of parking it on screen forever.
-  // A floor, not an exact pin: this asserts the range is new ENOUGH, so an unrelated
+  // A floor, not an exact pin: this asserts the version is new ENOUGH, so an unrelated
   // shared-package bump does not fail a test about zoom neutral.
+  //
+  // Read from the INSTALLED package rather than the declared range in package.json.
+  // The range is not always a version: the public snapshot of this repo vendors these
+  // two packages and declares them as `file:vendor/...`, which has no version in it at
+  // all. Parsing that yielded 0 and failed a guard about zoom while zoom was perfectly
+  // fine. The installed copy is what actually runs, so it is what should be asserted.
   it('depends on shells new enough to honor a per-app neutral', () => {
-    const pkg = JSON.parse(read('package.json')) as { dependencies: Record<string, string> }
-    const atLeast = (range: string, min: string) => {
+    const atLeast = (version: string, min: string) => {
       const parts = (s: string) => s.replace(/^\D*/, '').split('.').map(Number)
-      const [a, b, c] = parts(range)
+      const [a, b, c] = parts(version)
       const [x, y, z] = parts(min)
       return a !== x ? a > x : b !== y ? b > y : c >= z
     }
-    expect(atLeast(pkg.dependencies['@devkit-inc/electron-ui'], '2.5.0')).toBe(true)
-    expect(atLeast(pkg.dependencies['@devkit-inc/react-ui'], '1.18.0')).toBe(true)
+    const installed = (pkg: string) =>
+      (JSON.parse(read(`node_modules/${pkg}/package.json`)) as { version: string }).version
+    expect(atLeast(installed('@devkit-inc/electron-ui'), '2.5.0')).toBe(true)
+    expect(atLeast(installed('@devkit-inc/react-ui'), '1.18.0')).toBe(true)
   })
 
   it('resolves those ranges to installed copies that actually have the feature', () => {

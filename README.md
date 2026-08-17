@@ -20,13 +20,11 @@ Right:
 
 - **Session** — the running list of claude's own task summaries for this tab,
   captured from the OSC 0 titles the tab strip can only show one of.
-- **Specs** — design docs / plans for the current project, read from a Supabase
-  table. Clicking one opens the generated `.html` from the local specs repo in
-  your browser, which renders it. If that repo is not cloned here, it falls back
-  to the `.md` on GitHub — deliberately not the `.html`, which GitHub's blob view
-  shows as source rather than rendering. This widget needs credentials that are
-  specific to my own setup; without them it shows "unavailable" and nothing else
-  in the app is affected.
+- **Specs** — design docs / plans for the current project, read from
+  the configured specs table. Clicking one opens the generated `.html` from the local
+  specs repo in your browser, which renders it. If that repo is not cloned here,
+  it falls back to the `.md` on GitHub — deliberately not the `.html`, which
+  GitHub's blob view shows as source rather than rendering.
 - **Window** — how full the claude pane's context window is. Read from the
   session transcript under `~/.claude/projects`, not from the pane (a pty is a
   terminal, not an API), so the numbers are the ones the API itself returned.
@@ -76,9 +74,13 @@ Two different waits, with two different causes:
 - **Opening the window** costs ~8s, and it is `node-pty`'s synchronous spawn
   blocking the main process. Until that is fixed structurally, a loading screen
   covers the interval — the renderer is a separate process and keeps painting
-  throughout. Its messages come from a Supabase table with a built-in array and
-  a `localStorage` cache beneath it, because any IPC sent during the block would
-  queue behind the block.
+  throughout. Its messages come from the configured `loading_messages` table with a
+  built-in array and a `localStorage` cache beneath it, because any IPC sent
+  during the block would queue behind the block.
+
+
+The measurements and the structural fix are written up in design docs in a private specs repo.
+
 
 ## Layout
 
@@ -105,8 +107,8 @@ heights are fractions of their gutter, so they survive a window resize.
 - **About** — version and the three derived roots, which is the first place to
   look if paths resolve oddly.
 
-Presets sync to Supabase so they follow you between machines; the live layout
-stays local in `config.json`, because it
+Presets sync to the configured `layout_presets` table in Supabase so they follow you
+between machines; the live layout stays local in `config.json`, because it
 changes on every pointermove, is needed at first paint, must work offline, and
 is specific to the display it was dragged on. Sync is best-effort in both
 directions — offline or without credentials, everything still works from the
@@ -124,22 +126,37 @@ npm run electron:dev
 `npm run electron:dist` packages an NSIS installer into `release/` (see
 "Packaging" below).
 
-No credentials are needed to run bezel. The two Supabase-backed features (the
-Specs widget and layout-preset sync) look for a credentials file that is part of
-my own machine setup; when it isn't there — which is the case for any fresh
-clone — they report "unavailable" and everything else works normally. Credentials
-are read in the main process only and are never handed to the renderer.
+Bezel runs with no credentials at all. Two features — the Specs widget and
+layout-preset sync — read Supabase, and both degrade to "unavailable" when it
+is not configured. Nothing else depends on them.
 
-## Vendored dependencies
+To wire them up, create `~/.config/bezel/supabase.json`:
 
-Bezel is built on two of my own shared packages — `@devkit-inc/electron-ui` and
-`@devkit-inc/react-ui` (plus `theme-tokens` beneath them) — which are published
-to a private registry. Rather than leave this repo uninstallable, their built
-output is vendored under `vendor/@devkit-inc/` and wired up as `file:`
-dependencies, so `npm install` works from a plain clone with no auth.
+```json
+{
+  "url": "https://<project>.supabase.co",
+  "serviceRoleKey": "<key>",
+  "schemas": { "config": "<schema holding layout_presets and loading_messages>",
+               "docs": "<schema holding specs>" }
+}
+```
 
-They are a snapshot, not a subtree: upstream fixes land here only when the
-snapshot is refreshed.
+The Specs widget also reads `~/.config/bezel/specs-repos.json`, the org ->
+specs-repo mapping used to resolve a spec to a local path.
+
+Both locations are overridable: `BEZEL_CONFIG_DIR` moves the directory,
+`BEZEL_SUPABASE_CREDS` and `BEZEL_SPECS_REGISTRY` move a single file.
+
+The `schemas` block is required, not optional — PostgREST needs a non-public
+schema named on every request. A credentials file without it is treated as
+incomplete and reports "unavailable" rather than failing later with an opaque
+error. Credentials are read in the main process only and never handed to the
+renderer; every read and write goes back over IPC.
+
+Nothing about a particular deployment is compiled into this repo — no schema
+names, no paths naming a specific org. That is deliberate: the repo is
+published, and a hardcoded path is a public map to where a service-role key
+lives, even when no key is in the repo.
 
 ## Prerequisites
 
@@ -179,7 +196,7 @@ prebuilds on purpose. Reach for it then and not otherwise.
 npm run electron:dist
 ```
 
-Produces `release/bezel Setup 1.0.0.exe` via `electron-builder.config.cjs`.
+Produces `release/bezel Setup 0.1.0.exe` via `electron-builder.config.cjs`.
 `node-pty` is a native module and cannot be loaded from inside an asar
 archive, so the config unpacks it explicitly
 (`asarUnpack: ['**/node_modules/node-pty/**']`) — do not remove that line.
@@ -198,8 +215,9 @@ installing a toolchain.
 
 ## Design and plan
 
-The design docs and implementation plans live in a private specs repo and are
-not published here.
+
+The design doc and implementation plan live in a private specs repo and are not published here.
+
 
 ### node-pty and Spectre-mitigated libraries
 

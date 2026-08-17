@@ -47,7 +47,7 @@ export function SpecsWidget() {
   const [items, setItems] = useState<SpecItem[] | null | undefined>(undefined)
 
   const org = context.org
-  // The `project` key in sbrain_docs.specs is the last path segment of the
+  // The `project` key in the remote specs table is the last path segment of the
   // repo — `sbrain/sbrain-scripts` is stored as `sbrain-scripts`.
   const project = context.repo?.split('/').pop() ?? null
 

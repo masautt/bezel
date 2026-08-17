@@ -585,7 +585,7 @@ html, body, #root { height: 100%; margin: 0; }
 
 /* An inline list, not the app bar's flyout: this panel has room, and a settings
    dialog is where you go to browse rather than to flip one switch. The library
-   is unbounded (whatever sbrain_config.themes holds), so it scrolls with the
+   is unbounded (whatever the remote themes table holds), so it scrolls with the
    panel around it. */
 .theme-list { display: flex; flex-direction: column; gap: 1px; }
 

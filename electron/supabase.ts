@@ -1,14 +1,40 @@
 import { readFileSync } from 'fs'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { supabaseCredsPath } from './config-paths.js'
 
-// Credentials follow the existing shared `.config` convention
-// (project_secrets_dotconfig) — that file already exists with zero setup, and is
-// read here, in main, only. The service-role key is never handed to the
-// renderer; every table read and write goes back over IPC.
-//
-// Located under the orgs root main derived from the home directory rather than a
-// hardcoded absolute path, so it resolves on any machine.
-const credsPath = (orgsRoot: string) => `${orgsRoot}/sbrain-inc/.config/supabase-creds.json`
+/**
+ * The schema names to address, read from the credentials file rather than
+ * compiled in. PostgREST needs a non-public schema named explicitly on every
+ * request, so these are required rather than optional — but they describe a
+ * particular database, not this application, and so they belong with the
+ * credentials that reach it. See config-paths.ts for why.
+ */
+export type Schemas = { config: string; docs: string }
+
+type Creds = { url: string; serviceRoleKey: string; schemas: Schemas }
+
+let creds: Creds | null | undefined
+
+/**
+ * The parsed credentials, or null when the file is missing, unreadable, or
+ * incomplete. A file that predates the `schemas` block counts as incomplete:
+ * without schema names there is nothing valid to query, so it degrades to the
+ * same "unavailable" state as no credentials at all rather than failing later
+ * with a confusing PostgREST error.
+ */
+function readCreds(): Creds | null {
+  if (creds !== undefined) return creds
+  try {
+    const parsed = JSON.parse(readFileSync(supabaseCredsPath(), 'utf-8')) as Partial<Creds>
+    creds =
+      parsed?.url && parsed?.serviceRoleKey && parsed.schemas?.config && parsed.schemas?.docs
+        ? (parsed as Creds)
+        : null
+  } catch {
+    creds = null
+  }
+  return creds
+}
 
 let client: SupabaseClient | null | undefined
 
@@ -19,18 +45,19 @@ let client: SupabaseClient | null | undefined
  * and a second per-feature copy would mean two clients, two credential reads,
  * and two places for the "unavailable" path to drift.
  *
+ * Read in the main process only; the service-role key is never handed to the
+ * renderer, and every table read and write goes back over IPC.
+ *
  * Never throws. Every caller degrades to its own empty/unavailable state.
  */
-export function getSupabase(orgsRoot: string): SupabaseClient | null {
+export function getSupabase(): SupabaseClient | null {
   if (client !== undefined) return client
-  try {
-    const { url, serviceRoleKey } = JSON.parse(readFileSync(credsPath(orgsRoot), 'utf-8')) as {
-      url: string
-      serviceRoleKey: string
-    }
-    client = createClient(url, serviceRoleKey)
-  } catch {
-    client = null
-  }
+  const c = readCreds()
+  client = c ? createClient(c.url, c.serviceRoleKey) : null
   return client
+}
+
+/** The configured schema names, or null when credentials are unavailable. */
+export function getSchemas(): Schemas | null {
+  return readCreds()?.schemas ?? null
 }

@@ -2,7 +2,8 @@ import { readFileSync } from 'fs'
 // A relative import, not the `@shared` alias: tsc does not rewrite path-mapped
 // specifiers in its output, so a runtime (non-type-only) import through the
 // alias would resolve to a nonexistent "@shared" package once compiled.
-import { getSupabase } from './supabase.js'
+import { getSupabase, getSchemas } from './supabase.js'
+import { specsRegistryPath } from './config-paths.js'
 import { mapSpecRow } from '../src/specs.js'
 import type { SpecRow } from '../src/specs.js'
 import type { SpecItem } from '@shared/types.js'
@@ -25,11 +26,10 @@ export type SpecTarget =
  * The remote fallback points at the `.md`, not the `.html`, for that same reason:
  * Markdown is the form GitHub renders. Either way the user gets a document.
  *
- * `registry` is `sbrain-inc/.config/specs-repos.json` — the same org -> specs-repo
- * mapping the devkit-specs write hook resolves against. Read rather than derived
- * because the convention is not uniform: devkit-specs sits at
- * `orgs/devkit-inc/devkit-specs`, but sbrain-specs nests at
- * `orgs/sbrain-inc/sbrain/sbrain-specs`, and a naming rule would miss it.
+ * `registry` is the org -> specs-repo mapping described in config-paths.ts. It
+ * is read rather than derived because the convention is not uniform: some specs
+ * repos sit directly under their org, others nest a level deeper, and a naming
+ * rule would miss those.
  */
 export function resolveSpecTarget(
   org: string,
@@ -49,9 +49,9 @@ export function resolveSpecTarget(
 }
 
 /** The registry, or null when it is absent/unreadable — never a throw. */
-export function readSpecsRegistry(orgsRoot: string): Array<{ root: string; org: string }> | null {
+export function readSpecsRegistry(): Array<{ root: string; org: string }> | null {
   try {
-    const raw = readFileSync(`${orgsRoot}/sbrain-inc/.config/specs-repos.json`, 'utf-8')
+    const raw = readFileSync(specsRegistryPath(), 'utf-8')
     const parsed = JSON.parse(raw) as Array<{ root: string; org: string }>
     return Array.isArray(parsed) ? parsed : null
   } catch {
@@ -61,12 +61,13 @@ export function readSpecsRegistry(orgsRoot: string): Array<{ root: string; org: 
 
 // Returns null when specs are unavailable (no credentials, offline, query
 // error). That is deliberately distinct from [] — "no specs for this project".
-export async function listSpecs(orgsRoot: string, org: string, project: string): Promise<SpecItem[] | null> {
-  const supabase = getSupabase(orgsRoot)
-  if (!supabase) return null
+export async function listSpecs(org: string, project: string): Promise<SpecItem[] | null> {
+  const supabase = getSupabase()
+  const schemas = getSchemas()
+  if (!supabase || !schemas) return null
   try {
     const { data, error } = await supabase
-      .schema('sbrain_docs')
+      .schema(schemas.docs)
       .from('specs')
       .select('filename, file_path, status, tldr')
       .eq('org', org)

@@ -186,7 +186,7 @@ export function parseStore(raw: unknown): LayoutStore {
 
 // ── Supabase sync ────────────────────────────────────────────────────────────
 
-/** One row of sbrain_config.layout_presets, as PostgREST returns it. */
+/** One row of the remote layout_presets table, as PostgREST returns it. */
 export interface RemotePresetRow {
   id: string
   name: string

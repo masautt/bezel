@@ -12,7 +12,7 @@
 // unchanged and its unit tests are untouched — the manager did not move
 // logically, only physically.
 //
-// See the pty utility-process design doc (private specs repo).
+// See the design doc (private specs repo).
 import { readFileSync } from 'fs'
 import * as nodePty from 'node-pty'
 import { createPtyManager } from './pty-manager.js'

@@ -1,4 +1,4 @@
-import { getSupabase } from './supabase.js'
+import { getSupabase, getSchemas } from './supabase.js'
 // A relative import, not the `@shared` alias: tsc does not rewrite path-mapped
 // specifiers on emit, so a runtime import through the alias would resolve to a
 // nonexistent "@shared" package once compiled.
@@ -7,7 +7,6 @@ import type { LayoutPreset, RemotePresetRow } from '../src/presets.js'
 /** Scopes the shared table, so other devkit apps can use it without collision. */
 const APP = 'bezel'
 const TABLE = 'layout_presets'
-const SCHEMA = 'sbrain_config'
 
 /**
  * This module does I/O only. The merge policy — last-write-wins, tombstones,
@@ -20,12 +19,13 @@ const SCHEMA = 'sbrain_config'
  */
 
 /** Every row for this app, tombstones included — the merge needs to see deletes. */
-export async function pullPresets(orgsRoot: string): Promise<RemotePresetRow[] | null> {
-  const supabase = getSupabase(orgsRoot)
-  if (!supabase) return null
+export async function pullPresets(): Promise<RemotePresetRow[] | null> {
+  const supabase = getSupabase()
+  const schemas = getSchemas()
+  if (!supabase || !schemas) return null
   try {
     const { data, error } = await supabase
-      .schema(SCHEMA)
+      .schema(schemas.config)
       .from(TABLE)
       .select('id, name, layout, updated_at, deleted_at')
       .eq('app', APP)
@@ -46,10 +46,11 @@ export async function pullPresets(orgsRoot: string): Promise<RemotePresetRow[] |
  * elsewhere resurrects it — which is the intent when a local edit is newer than
  * a remote delete.
  */
-export async function pushPresets(orgsRoot: string, presets: LayoutPreset[]): Promise<boolean> {
+export async function pushPresets(presets: LayoutPreset[]): Promise<boolean> {
   if (presets.length === 0) return true
-  const supabase = getSupabase(orgsRoot)
-  if (!supabase) return false
+  const supabase = getSupabase()
+  const schemas = getSchemas()
+  if (!supabase || !schemas) return false
   try {
     const rows = presets.map(p => ({
       id: p.id,
@@ -59,7 +60,7 @@ export async function pushPresets(orgsRoot: string, presets: LayoutPreset[]): Pr
       updated_at: p.updatedAt,
       deleted_at: null,
     }))
-    const { error } = await supabase.schema(SCHEMA).from(TABLE).upsert(rows, { onConflict: 'id' })
+    const { error } = await supabase.schema(schemas.config).from(TABLE).upsert(rows, { onConflict: 'id' })
     return !error
   } catch {
     return false
@@ -71,12 +72,13 @@ export async function pushPresets(orgsRoot: string, presets: LayoutPreset[]): Pr
  * locally push it straight back up on its next startup — the tombstone is what
  * makes the deletion win.
  */
-export async function tombstonePreset(orgsRoot: string, id: string, now: string): Promise<boolean> {
-  const supabase = getSupabase(orgsRoot)
-  if (!supabase) return false
+export async function tombstonePreset(id: string, now: string): Promise<boolean> {
+  const supabase = getSupabase()
+  const schemas = getSchemas()
+  if (!supabase || !schemas) return false
   try {
     const { error } = await supabase
-      .schema(SCHEMA)
+      .schema(schemas.config)
       .from(TABLE)
       .update({ deleted_at: now, updated_at: now })
       .eq('app', APP)

@@ -1,7 +1,6 @@
 {
   "name": "bezel",
-  "version": "1.0.0",
-  "license": "MIT",
+  "version": "1.1.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/masautt/bezel.git"
@@ -57,9 +56,6 @@
     "vitest": "^4.1.9",
     "wait-on": "^9.0.10"
   },
-  "overrides": {
-    "@devkit-inc/theme-tokens": "file:vendor/@devkit-inc/theme-tokens"
-  },
   "build": {
     "appId": "com.masautt.bezel",
     "productName": "bezel",
@@ -95,5 +91,6 @@
   "allowScripts": {
     "node-pty@1.1.0": true,
     "electron@35.7.5": true
-  }
+  },
+  "license": "MIT"
 }

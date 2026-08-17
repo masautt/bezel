@@ -1,4 +1,4 @@
-import { getSupabase } from './supabase.js'
+import { getSupabase, getSchemas } from './supabase.js'
 // A relative import, not the `@shared` alias: tsc does not rewrite path-mapped
 // specifiers on emit, so a runtime import through the alias would resolve to a
 // nonexistent "@shared" package once compiled.
@@ -7,7 +7,6 @@ import type { LoadingMessage } from '../src/loading-messages.js'
 /** Scopes the shared table, so other devkit apps can use it without collision. */
 const APP = 'bezel'
 const TABLE = 'loading_messages'
-const SCHEMA = 'sbrain_config'
 
 /**
  * The remote loading lines, or null when Supabase is unavailable.
@@ -22,12 +21,13 @@ const SCHEMA = 'sbrain_config'
  * normalizeMessages in src/loading-messages.ts accepts either, and converting
  * here would just be a second place for the shape to drift.
  */
-export async function pullLoadingMessages(orgsRoot: string): Promise<Array<Pick<LoadingMessage, 'weight'> & { message: string }> | null> {
-  const supabase = getSupabase(orgsRoot)
-  if (!supabase) return null
+export async function pullLoadingMessages(): Promise<Array<Pick<LoadingMessage, 'weight'> & { message: string }> | null> {
+  const supabase = getSupabase()
+  const schemas = getSchemas()
+  if (!supabase || !schemas) return null
   try {
     const { data, error } = await supabase
-      .schema(SCHEMA)
+      .schema(schemas.config)
       .from(TABLE)
       .select('message, weight')
       .eq('app', APP)

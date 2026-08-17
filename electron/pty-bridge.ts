@@ -2,7 +2,7 @@
 // calls, so every call site keeps its shape and never learns that the work
 // moved to another process.
 //
-// See the pty utility-process design doc (private specs repo).
+// See the design doc (private specs repo).
 import type { PtyManager } from './pty-manager.js'
 import type { PaneKey } from '../src/types.js'
 import type { SessionIntent } from '../src/tabs.js'
