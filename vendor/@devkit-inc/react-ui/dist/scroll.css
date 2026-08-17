@@ -1,0 +1,39 @@
+/* Shared scrollbar for the sbrain federation and the devkit desktop tools.
+   One class, `scroll-slim`: a 6px fully-rounded bar, visible at rest so a scrollable
+   region announces itself before the pointer arrives, brightening under the pointer.
+
+   The class carries no colors of its own. Each ecosystem defines one of the two token
+   pairs below and the var() chain falls through to whichever is present: sbrain apps set
+   --line/--line-strong (@sbrain-inc/config/theme.css), the desktop tools set
+   --ds-scroll-thumb/--ds-scroll-thumb-hover (appbar.css), with a further fallback to
+   --ds-border-dim/--ds-border for any consumer on an older appbar.css. The trailing gray
+   is a guard so an app with neither still gets a visible bar — it is not a theme value. */
+.scroll-slim {
+  --scroll-thumb: var(--line, var(--ds-scroll-thumb, var(--ds-border-dim, rgba(128, 128, 128, 0.35))));
+  --scroll-thumb-hover: var(--line-strong, var(--ds-scroll-thumb-hover, var(--ds-border, rgba(128, 128, 128, 0.55))));
+}
+.scroll-slim::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+  background: transparent;
+}
+.scroll-slim::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 9999px;
+}
+.scroll-slim:hover::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb-hover);
+}
+
+/* Firefox only. Firefox has no ::-webkit-scrollbar, so this query is true there and false
+   in Chromium and WebKit — which is the whole point: from Chromium 121, the two standard
+   scrollbar-styling properties guarded below override the pseudo-elements above outright if
+   they appear anywhere else in this file. That is how masaudit's ported webkit rules became
+   dead code. The guard makes it unrepeatable. Firefox gets a thin square bar rather than a
+   6px rounded one; every shell here is Chromium, so that is the accepted trade. */
+@supports not selector(::-webkit-scrollbar) {
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scroll-thumb) transparent;
+  }
+}

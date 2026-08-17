@@ -1,0 +1,488 @@
+/* @devkit-inc/desktop-shell base shell chrome.
+   Theme tokens default to github-dark; override any of them in your app's :root
+   (e.g. `--ds-accent: #C6FF00`) to rebrand without touching this file. */
+:root {
+  --ds-bg: #0d1117;
+  --ds-surface: #161b22;
+  --ds-border: #30363d;
+  --ds-border-dim: #21262d;
+  --ds-text: #e6edf3;
+  --ds-muted: #8b949e;
+  --ds-accent: #58a6ff;
+  /* Dedicated scrollbar-thumb tokens. --ds-border-dim is a divider tint, not a thumb
+     tint, and measures only 1.24:1 against the surface — too dim to read as a
+     scrollbar. These are matched to the sbrain federation's measured --line /
+     --line-strong contrast ratios (1.70:1 rest / 2.30:1 hover) so the two ecosystems
+     show the same scrollbar brightness on one screen. */
+  --ds-scroll-thumb: #363c44;
+  --ds-scroll-thumb-hover: #484f5c;
+}
+
+/* Light theme — activated by data-theme="light" on <html>. Higher specificity than a
+   bare :root, so it overrides the dark defaults (and any consumer :root mapping). */
+:root[data-theme='light'] {
+  --ds-bg: #ffffff;
+  --ds-surface: #f6f8fa;
+  --ds-border: #d1d9e0;
+  --ds-border-dim: #eaeef2;
+  --ds-text: #1f2328;
+  --ds-muted: #59636e;
+  --ds-accent: #0969da;
+  --ds-scroll-thumb: #e1e4e8;
+  --ds-scroll-thumb-hover: #ccd4dc;
+}
+
+/* App-shell layout (frameless full-height column). */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+body {
+  background: var(--ds-bg);
+  color: var(--ds-text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Frameless AppBar. The strip drags; buttons opt out. Window controls are full bar
+   height and flush to the top-right pixel (no right padding, no corner radius on the
+   cluster) so the ✕ is clickable in the corner. */
+.ds-appbar {
+  display: flex;
+  align-items: center;
+  flex: none;
+  height: 32px;
+  padding-left: 12px; /* left inset only — NO right padding */
+  background: var(--ds-bg);
+  border-bottom: 1px solid var(--ds-border-dim);
+  -webkit-app-region: drag;
+  user-select: none;
+  /* Hold at the app's home size while page content zooms: counter Chromium's page zoom.
+     Both vars are published by useAppBarZoomVar — --ds-page-factor in lockstep with the
+     zoom, --ds-zoom-neutral once from the main process (bezel's home is 1.1, not 1). At
+     home the two cancel to zoom: 1, so the bar matches the content it sits above. The
+     fallbacks of 1 keep a neutral first paint — and any app on electron-ui < 2.5.0,
+     which publishes no neutral — correct. */
+  zoom: calc(var(--ds-zoom-neutral, 1) / var(--ds-page-factor, 1));
+}
+.ds-appbar-brand {
+  margin-right: 8px;
+  font: 12px/1 'SF Mono', 'Fira Code', monospace;
+  color: var(--ds-brand, var(--ds-muted));
+}
+.ds-appbar-nav,
+.ds-appbar-btn {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: none;
+  color: var(--ds-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+.ds-appbar-nav {
+  width: 26px;
+  height: 24px;
+  margin-right: 2px;
+  border-radius: 5px;
+}
+.ds-appbar-nav:hover {
+  background: var(--ds-border-dim);
+  color: var(--ds-text);
+}
+.ds-appbar-drag {
+  flex: 1;
+  align-self: stretch;
+  -webkit-app-region: drag;
+}
+.ds-appbar-btn {
+  width: 46px;
+  height: 100%; /* full bar height — corner-anchored */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-appbar-btn:hover {
+  background: var(--ds-border-dim);
+  color: var(--ds-text);
+}
+.ds-appbar-close:hover {
+  background: #da3633;
+  color: #fff;
+}
+
+/* Zoom indicator — compact button in the window-control cluster; only present when
+   zoom ≠ 100%. The popover anchors under the icon, right-aligned. */
+.ds-zoom {
+  position: relative;
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+}
+.ds-zoom-icon {
+  width: 30px;
+  height: 24px;
+  margin: 0 2px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.ds-zoom-pop {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  z-index: 50;
+  -webkit-app-region: no-drag;
+}
+.ds-zoom-pct {
+  min-width: 40px;
+  text-align: center;
+  font: 12px/1 'SF Mono', 'Fira Code', monospace;
+  color: var(--ds-text);
+}
+.ds-zoom-step,
+.ds-zoom-reset {
+  -webkit-app-region: no-drag;
+  background: transparent;
+  border: 1px solid var(--ds-border);
+  color: var(--ds-text);
+  cursor: pointer;
+  border-radius: 5px;
+  height: 22px;
+}
+.ds-zoom-step {
+  width: 24px;
+  font-size: 15px;
+  line-height: 1;
+}
+.ds-zoom-reset {
+  padding: 0 8px;
+  font-size: 12px;
+}
+.ds-zoom-step:hover,
+.ds-zoom-reset:hover {
+  background: var(--ds-border-dim);
+}
+
+/* Breadcrumb navigation path — `[←][→][⟳] a | b | c`, each crumb owning its own dropdown.
+   The panel's left edge aligns with its segment's left edge, and .ds-crumb-item repeats
+   the trigger's 10px inset + 7px gap, so an option's icon lands in the same column as the
+   trigger's icon above it. That alignment is structural, not hand-tuned padding. */
+.ds-crumbs {
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  -webkit-app-region: no-drag;
+}
+.ds-crumb-history {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 6px;
+}
+.ds-crumb-arrow {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ds-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  -webkit-app-region: no-drag;
+}
+.ds-crumb-arrow:hover:not(:disabled) {
+  background: var(--ds-border-dim);
+  color: var(--ds-text);
+}
+/* Disabled stays PRESENT and dimmed — never hidden. A direction that vanishes would
+   reflow the whole path sideways on every navigation. */
+.ds-crumb-arrow:disabled {
+  color: var(--ds-border);
+  cursor: default;
+}
+.ds-crumb {
+  position: relative;
+  display: flex;
+  align-self: stretch;
+}
+.ds-crumb-trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 100%;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  color: var(--ds-text);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.ds-crumb-trigger[data-static] {
+  cursor: default;
+}
+/* The hover fill is a rectangle covering exactly the segment's own box, so the highlight
+   and the hit area are the same shape — which is also the box the dropdown's min-width
+   measures against. It stays on a pseudo-element rather than moving onto the button so the
+   separator's z-index: 1 keeps painting over it (see .ds-crumb-sep). */
+button.ds-crumb-trigger::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: transparent;
+  pointer-events: none;
+}
+button.ds-crumb-trigger:hover::before,
+button.ds-crumb-trigger[aria-expanded='true']::before {
+  background: var(--ds-border-dim);
+}
+/* Content rides above its own fill. */
+.ds-crumb-trigger > * {
+  position: relative;
+  z-index: 1;
+}
+.ds-crumb-brand {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ds-muted);
+}
+/* The crumb trail has two type tiers: the root crumb is an uppercase wordmark (see
+   .ds-crumb-brand), every other segment is a lowercase path segment. Comp labels arrive
+   from each guest's published manifest in whatever case the comp declared, so the case is
+   normalized here rather than in the data — the DOM keeps the real label for copy/paste
+   and assistive technology, and no comp is edited to satisfy the bar's typography. */
+.ds-crumb-label {
+  font-weight: 500;
+  text-transform: lowercase;
+}
+.ds-crumb-sep {
+  display: flex;
+  align-items: center;
+  color: var(--ds-muted);
+  font-size: 12px;
+  /* Above every fill, not just its own neighbors': .ds-crumb sets no z-index, so it opens
+     no stacking context and siblings paint in document order — a later crumb's fill would
+     otherwise cover this bar. The fill tucking UNDER the stroke is the intended effect. */
+  position: relative;
+  z-index: 1;
+}
+.ds-crumb-caret {
+  color: var(--ds-muted);
+  transition: transform 0.15s;
+}
+.ds-crumb-caret[data-open] {
+  transform: rotate(180deg);
+}
+/* top: calc(100% + 1px) — 100% is the segment's content box, but the bar is a border-box,
+   so the extra pixel is the bar's bottom border. Without it the panel overlaps the border
+   instead of hanging below it (verify:theme asserts panel top === bar bottom).
+
+   min-width: 100% squares the panel off against the segment it hangs from — both resolve
+   against the same positioned .ds-crumb, so the dropdown is never narrower than the area
+   that highlights and takes the click. It is a floor, not a fixed width: max-content still
+   lets a long comp label (which arrives from a guest's manifest, unbounded) push the panel
+   wider rather than wrapping or truncating it. */
+.ds-crumb-panel {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 1px);
+  z-index: 50;
+  width: max-content;
+  min-width: 100%;
+  padding: 4px 0;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.ds-crumb-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 6px 14px 6px 10px;
+  border: none;
+  background: transparent;
+  color: var(--ds-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  /* An option row is the same name as the crumb it becomes on click; it would be odd
+     for the two to disagree, so the row follows .ds-crumb-label. */
+  text-transform: lowercase;
+}
+/* Actions are commands, not names — "Sign out" is a verb, and nothing it opens is a crumb.
+   It shares every other row style, so the exemption is scoped to the casing alone. */
+.ds-crumb-action {
+  text-transform: none;
+}
+.ds-crumb-item:hover {
+  background: var(--ds-border-dim);
+  color: var(--ds-text);
+}
+.ds-crumb-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--ds-border);
+}
+.ds-crumb-icon {
+  flex: none;
+}
+
+/* Overflow menu — the ⋯ button in the window-control cluster and its panel. The panel is
+   right-anchored because the trigger sits at the right edge; left-anchored it would hang
+   off the screen. It shares the crumb panel's surface/border/shadow treatment so the two
+   dropdowns in the same bar read as one thing. */
+.ds-menu {
+  position: relative;
+  align-self: stretch;
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+/* top: calc(100% + 1px) — 100% is the content box; the extra pixel is the bar's own
+   bottom border, so the panel hangs below it rather than overlapping it. Same reasoning
+   as .ds-crumb-panel. */
+.ds-menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 1px);
+  z-index: 50;
+  width: max-content;
+  min-width: 168px;
+  padding: 4px 0;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-top: none;
+  border-radius: 8px 0 0 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+.ds-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 12px;
+  border: none;
+  background: transparent;
+  color: var(--ds-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ds-menu-item:hover {
+  background: var(--ds-border-dim);
+  color: var(--ds-text);
+}
+.ds-menu-label {
+  flex: 1;
+  text-align: left;
+}
+/* App-supplied rows may carry no icon. Reserving the column keeps their labels
+   aligned with Theme and Full screen instead of sitting proud of them. */
+.ds-menu-icon {
+  flex: none;
+  width: 14px;
+  display: inline-flex;
+  justify-content: center;
+}
+/* Reserved whether or not it is checked, so the label does not shift when the state flips. */
+.ds-menu-check {
+  flex: none;
+  width: 10px;
+  display: inline-flex;
+  justify-content: center;
+  color: var(--ds-text);
+}
+
+/* Theme picker — a flyout off the ⋯ menu's "Theme" row. It opens LEFT (right: 100%)
+   because the ⋯ button is the rightmost thing in the bar and a right-opening panel would
+   hang off the screen edge. Shares the menu panel's surface/border/shadow so the two read
+   as one component. */
+.ds-submenu {
+  position: relative;
+}
+.ds-submenu-arrow {
+  flex: none;
+  width: 10px;
+  text-align: center;
+  color: var(--ds-muted);
+}
+.ds-submenu-panel {
+  position: absolute;
+  right: 100%;
+  top: 0;
+  margin-right: 2px;
+  z-index: 60; /* above .ds-menu-panel's 50 — it is a child that must paint over it */
+  width: max-content;
+  min-width: 180px;
+  /* The library is unbounded (it is whatever sbrain_config.themes holds), so the panel
+     caps at the viewport and scrolls rather than growing past the window. 64px leaves the
+     bar plus a margin. `.scroll-slim` supplies the bar itself. */
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  padding: 4px 0;
+  background: var(--ds-surface);
+  border: 1px solid var(--ds-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+/* Group heading ("Dark" / "Light"). Not a menuitem — it is a label, so it takes the
+   dimmest treatment in the panel and never highlights. */
+.ds-menu-heading {
+  padding: 6px 12px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ds-muted);
+  opacity: 0.75;
+}
+.ds-menu-heading:not(:first-child) {
+  margin-top: 2px;
+  border-top: 1px solid var(--ds-border-dim);
+  padding-top: 8px;
+}
+/* The swatch shows a theme's own --ds-bg with its --ds-accent as an inner bar, so the
+   list is scannable without applying anything. Colors are inline (they come from the
+   theme being previewed, not from the active one) — only geometry lives here. */
+.ds-theme-swatch {
+  flex: none;
+  display: inline-flex;
+  align-items: flex-end;
+  width: 14px;
+  height: 14px;
+  border: 1px solid;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ds-theme-swatch > span {
+  width: 100%;
+  height: 4px;
+}
+
+/* No fullscreen rules by design. The bar stays in normal flow in fullscreen exactly as it
+   is windowed, so there is nothing to translate away and nothing to reveal. */

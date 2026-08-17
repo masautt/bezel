@@ -1,0 +1,72 @@
+{
+  "name": "@devkit-inc/react-ui",
+  "version": "1.25.0",
+  "description": "Shared React UI — schema explorer, calendar, theme, icons",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    },
+    "./appbar.css": "./dist/appbar.css",
+    "./scroll.css": "./dist/scroll.css",
+    "./console.css": "./dist/console.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "peerDependencies": {
+    "@supabase/supabase-js": ">=2",
+    "@xyflow/react": ">=12",
+    "react": ">=19"
+  },
+  "peerDependenciesMeta": {
+    "@xyflow/react": {
+      "optional": true
+    },
+    "@supabase/supabase-js": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@supabase/supabase-js": "^2.112.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.14",
+    "@xyflow/react": "^12.11.0",
+    "eslint": "^10.2.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "jsdom": "^29.1.1",
+    "tsup": "^8.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.58.2",
+    "vitest": "^4.1.9"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devkit-inc/react-ui.git"
+  },
+  "dependencies": {
+    "@devkit-inc/theme-tokens": "file:../theme-tokens"
+  }
+}

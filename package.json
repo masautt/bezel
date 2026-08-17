@@ -1,0 +1,99 @@
+{
+  "name": "bezel",
+  "version": "1.0.0",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masautt/bezel.git"
+  },
+  "private": true,
+  "main": "dist-electron/electron/main.js",
+  "description": "Two headless terminals in a centered column, with project context in the gutters.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p client/tsconfig.json --noEmit && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.tests.json --noEmit && tsc -p client/tsconfig.json --noEmit && tsc -p electron/tsconfig.json --noEmit",
+    "lint": "eslint client/src/ electron/ src/",
+    "test": "vitest run",
+    "electron:dev": "npm run build && tsc -p electron/tsconfig.json && electron dist-electron/electron/main.js",
+    "electron:hmr": "tsc -p electron/tsconfig.json && concurrently -k -n dev,electron \"npm run dev\" \"wait-on http://localhost:5173 && cross-env DESKTOP_SHELL_DEV_URL=http://localhost:5173 electron dist-electron/electron/main.js\"",
+    "electron:dist": "npm run build && tsc -p electron/tsconfig.json && electron-builder --config electron-builder.config.cjs",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "reinstall": "node node_modules/@devkit-inc/electron-ui/scripts/reinstall.mjs --build electron:dist",
+    "dev:shortcut": "node node_modules/@devkit-inc/electron-ui/scripts/dev-shortcut.mjs",
+    "postinstall": "patch-package"
+  },
+  "dependencies": {
+    "@devkit-inc/electron-ui": "file:vendor/@devkit-inc/electron-ui",
+    "@devkit-inc/react-ui": "file:vendor/@devkit-inc/react-ui",
+    "@supabase/supabase-js": "^2.58.0",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/addon-web-links": "^0.11.0",
+    "@xterm/addon-webgl": "^0.18.0",
+    "@xterm/xterm": "^5.5.0",
+    "node-pty": "^1.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.3",
+    "@types/node": "25.9.3",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.2",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "35.7.5",
+    "electron-builder": "^25.1.8",
+    "eslint": "^8.57.1",
+    "jsdom": "^29.1.1",
+    "patch-package": "^8.0.1",
+    "prettier": "^3.8.3",
+    "typescript": "6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9",
+    "wait-on": "^9.0.10"
+  },
+  "overrides": {
+    "@devkit-inc/theme-tokens": "file:vendor/@devkit-inc/theme-tokens"
+  },
+  "build": {
+    "appId": "com.masautt.bezel",
+    "productName": "bezel",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "node_modules/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "bezel",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    }
+  },
+  "allowScripts": {
+    "node-pty@1.1.0": true,
+    "electron@35.7.5": true
+  }
+}

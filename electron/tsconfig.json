@@ -1,0 +1,12 @@
+{
+  "extends": "@devkit-inc/electron-ui/tsconfig.node.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "outDir": "../dist-electron",
+    "rootDir": "..",
+    "baseUrl": "..",
+    "paths": { "@shared/*": ["src/*"] }
+  },
+  "include": ["**/*", "../src/**/*"],
+  "exclude": ["../node_modules", "../client", "../dist", "../dist-electron", "../tests"]
+}

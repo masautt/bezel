@@ -1,0 +1,1204 @@
+/* The only stylesheet this app loads besides this file is
+   @devkit-inc/react-ui/appbar.css, which defines `--ds-*` tokens (--ds-bg,
+   --ds-surface, --ds-border, --ds-border-dim, --ds-text, --ds-muted,
+   --ds-accent) — not the `--surface-*` / `--border-*` / `--fg-*` / `--accent-fg`
+   names this file's `var(..., fallback)` calls reference below. Nothing ever
+   defined those, so every rule below was rendering its hardcoded fallback.
+   Alias to the real tokens instead of inventing new literals: it keeps this
+   app themeable off the same tokens the app bar already reacts to (light vs.
+   dark via `:root[data-theme='light']` in appbar.css). There is no dedicated
+   "emphasis border" token upstream, so --border-emphasis borrows --ds-muted,
+   which is reliably brighter than --ds-border/--ds-border-dim in both themes. */
+:root {
+  --surface-canvas: var(--ds-bg);
+  --surface-card: var(--ds-surface);
+  --border-default: var(--ds-border);
+  --border-emphasis: var(--ds-muted);
+  --fg-default: var(--ds-text);
+  --fg-muted: var(--ds-muted);
+  --accent-fg: var(--ds-accent);
+  /* The hover wash react-ui's own bar buttons use (`.ds-appbar-btn:hover`), so
+     bezel's tabs and its gear highlight identically to the window controls two
+     inches to the right. --ds-border-dim is a dim tint rather than a border
+     here; upstream uses it for exactly this. */
+  --surface-hover: var(--ds-border-dim);
+  /* "A session is waiting for you", on the tab strip. --ds-ok-fg rather than
+     --ds-accent: the accent is already what "this is the tab you are in" means
+     here, and a ready background tab has to read as a DIFFERENT thing than the
+     active one, not a brighter version of it. Green is also the color the
+     terminal itself uses for a finished turn, which is where the expectation
+     comes from. Unlike the chrome tokens above, --ds-ok-fg is part of the
+     theme registry's semantic set and is genuinely defined by every theme —
+     the literal is only for the pre-first-paint frame and for jsdom. */
+  --ready-fg: var(--ds-ok-fg, #3fb950);
+  /* "This tab's directory is gone", on the tab strip and its placeholder
+     panel. Same reasoning as --ready-fg: --ds-danger-fg is part of the theme
+     registry's semantic set (genuinely defined by every theme), and the
+     literal is only for the pre-first-paint frame and for jsdom. */
+  --danger-fg: var(--ds-danger-fg, #f85149);
+}
+
+html, body, #root { height: 100%; margin: 0; }
+
+.app { display: flex; flex-direction: column; height: 100%; }
+
+.grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 240px;
+}
+
+/* The gutter itself does NOT scroll: each slot is sized (or sizes to content)
+   and owns its own internal scroll, so nothing above can be pushed out of view.
+   `gap` is 0 because the grabbers between slots supply the spacing — a gap here
+   would double it, and only on the seams that have a handle. */
+.gutter {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 8px;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--surface-canvas, #0d1117);
+  border-inline: 1px solid var(--border-default, #30363d);
+}
+
+/* The center area stacks one layer per tab; each layer is the two-pane grid. */
+.center { position: relative; min-height: 0; background: var(--surface-canvas, #0d1117); }
+
+.layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  min-height: 0;
+}
+/* display:none, which this deliberately did NOT use until the measurement below
+   and the guard that made it safe.
+
+   The original objection was correct: a collapsed layer reports 0x0 to the
+   FitAddon, and that size used to be forwarded straight to the tab's background
+   ptys — a live conpty reshaped to nothing while its shell kept writing to it.
+   `usableDimensions` (src/pane-size.ts) now refuses any measurement a pty
+   cannot have, so a layer with no box simply produces no resize and the pane
+   keeps the size it last genuinely had.
+
+   `visibility: hidden` keeps a full-size box, and rAF does not care that
+   nothing is on screen, so every background tab went on rendering every chunk
+   it received. Measured against a pane streaming at full rate: 18.77 ms/KB
+   hidden this way, against 1.96 ms/KB with no box at all — 90% of the cost of a
+   pane nobody can see. The same pane also drained 7.6x more output in the
+   window, no longer paced by a renderer drawing for no one.
+
+   pointer-events is now redundant but harmless, and says what is meant. */
+.layer.hidden { display: none; pointer-events: none; }
+.pane { min-height: 0; overflow: hidden; padding: 4px 8px; }
+
+/* Stands in for the pane pair on a tab in `missing` — see the note in App.
+   Centered rather than filling the two-pane grid: there is nothing to split,
+   just one honest message. */
+.tab-missing-panel {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  height: 100%;
+  padding: 24px;
+  text-align: center;
+  color: var(--danger-fg, #f85149);
+}
+.tab-missing-panel .tab-missing-path {
+  color: var(--fg-muted, #8b949e);
+  font-family: monospace;
+  font-size: 12px;
+}
+
+.divider {
+  height: 4px;
+  cursor: row-resize;
+  background: var(--border-default, #30363d);
+}
+.divider:hover { background: var(--border-emphasis, #484f58); }
+
+/* Parked: the shell pane sits at a zero-height grid track and this bar is all
+   that is left of it, so it has to read as something you can act on — a 4px
+   hairline reads as a seam and gives no clue the pane went anywhere
+   recoverable. Taller, lit, and carrying the grip that says "double-click me"
+   (App.onToggleShell brings the pane back at its previous split).
+
+   `cursor: pointer`, not row-resize: there is nothing to trade height with
+   while collapsed, and App disconnects the drag to match. */
+.layer-shell-collapsed .divider {
+  height: 8px;
+  cursor: pointer;
+  background: var(--surface-hover, #21262d);
+  box-shadow: inset 0 1px 0 var(--border-default, #30363d);
+}
+.layer-shell-collapsed .divider::after {
+  content: '';
+  display: block;
+  width: 28px;
+  height: 2px;
+  margin: 3px auto 0;
+  border-radius: 1px;
+  background: var(--border-emphasis, #484f58);
+}
+.layer-shell-collapsed .divider:hover { background: var(--surface-card, #161b22); }
+
+/* The gutter grabbers. Flush against the widget above rather than a full-width
+   bar: they trade height between two cards, so they read as the seam between
+   them. `flex: 0 0 4px` stops the gutter's flex chain from shrinking them to
+   nothing once the sized slots have claimed their share. */
+/* 8px, matching the gap it replaced, so slot spacing is unchanged — and a
+   grabber twice as tall is a correspondingly easier drag target. Transparent
+   until hovered: at rest it should read as spacing, not as furniture. */
+.gutter .divider {
+  flex: 0 0 8px;
+  background: transparent;
+  border-radius: 2px;
+}
+.gutter .divider:hover { background: var(--border-emphasis, #484f58); }
+
+/* Vertical: separates a gutter from the center column. A grid child, so it
+   needs no width — the 4px track in grid-template-columns sizes it. */
+.divider-v {
+  height: auto;
+  cursor: col-resize;
+  background: var(--border-default, #30363d);
+}
+.divider-v:hover { background: var(--border-emphasis, #484f58); }
+
+/* A slot is the sizing unit; the widget inside simply fills it. An `auto` slot
+   takes what it needs and gives back what it must — shrinking in order, its
+   widget scrolling internally rather than clipping, when the gutter runs out. A
+   slot with an inline flex-basis gets exactly what it asked for. Nothing
+   expands to fill the gutter any more: leftover space at the bottom of a column
+   is the visible evidence that nothing is bigger than it needs to be. */
+.slot {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 0 1 auto;
+}
+/* Header-only: must not shrink further or the title clips. */
+.slot.collapsed { flex: 0 0 auto; }
+.slot > .widget { flex: 1 1 auto; }
+
+/* The two gauges sit against the BOTTOM of the right gutter rather than stacking
+   under Specs with dead space below them. They are glanced at, never read, so
+   the bottom-right corner — the last place the eye lands and the one that does
+   not move when the widgets above it grow — is where they belong.
+   `margin-top: auto` on the first of the pair eats the leftover height, which is
+   what pushes it and everything after it down. Keyed on Window because it is the
+   head of the bottom cluster in DEFAULT_LAYOUT; reordering the gutter in
+   settings moves the split with it, which is the sensible reading of a manual
+   reorder. */
+.gutter-right .slot[data-slot='window'] { margin-top: auto; }
+
+/* A widget that has nothing to say renders null (Changes on a clean repo, Specs
+   on a project with none), which leaves its `.slot` wrapper genuinely childless.
+   Without this the gutter would show a run of empty boxes and floating grab
+   handles. The `:has` pair takes the slot's grabber with it on BOTH sides, so a
+   hidden first-or-last slot cannot strand a handle with nothing to trade
+   against. */
+.gutter .slot:empty { display: none; }
+.gutter .slot:empty + .divider { display: none; }
+.gutter .divider:has(+ .slot:empty) { display: none; }
+
+.widget {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-card, #161b22);
+  border: 1px solid var(--border-default, #30363d);
+  border-radius: 6px;
+  padding: 7px 8px;
+  font-size: 11px;
+  flex: 0 1 auto;
+}
+.widget.collapsed { flex: 0 0 auto; }
+
+.widget-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+/* A flex column so a widget that pins its own chrome (Apps: filter + current
+   repo) can hand the leftover height to an inner scroller. Widgets with no
+   inner scroller simply scroll here instead. */
+.widget-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+.widget-head-right {
+  flex: 0 0 auto;
+  margin-left: auto;
+  display: flex;
+}
+
+.widget h5.widget-title,
+.widget button.widget-title {
+  margin: 0;
+  padding: 0;
+  font-family: inherit;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted, #8b949e);
+  font-weight: 600;
+  text-align: left;
+  background: none;
+  border: none;
+}
+.widget button.widget-title { cursor: pointer; }
+.widget button.widget-title:hover { color: var(--fg-default, #c9d1d9); }
+.widget .row {
+  color: var(--fg-default, #c9d1d9);
+  padding: 1px 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.widget .row.muted { color: var(--fg-muted, #8b949e); }
+/* Inherits `.row`'s trailing ellipsis; the full path is on the `title`.
+   An earlier version tried `direction: rtl` to clip the HEAD instead (a path's
+   tail identifies it), which was wrong twice over and is recorded here so it is
+   not retried: with `unicode-bidi: isolate` the neutral `/` separators let bidi
+   reorder the segments, so `~/source` rendered as `source/~`; and switching to
+   `unicode-bidi: plaintext` fixed the order but left the ellipsis at the END
+   anyway — identical to plain LTR, for the cost of a bidi hazard. Verified in
+   the running app. If head-clipping is ever wanted, truncate the string in JS. */
+.widget .row.context-cwd {
+  text-align: left;
+}
+.widget .row.current { color: var(--accent-fg, #58a6ff); font-weight: 600; }
+.widget-failed { color: var(--fg-muted, #8b949e); font-style: italic; }
+
+/* Visually gone, still announced. Used where an icon carries meaning that its
+   own emoji name does not (the Specs widget's design/plan glyphs). Clipped
+   rather than `display: none`, which would take it out of the accessibility
+   tree along with the layout. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 1px 0;
+  font: inherit;
+  color: var(--fg-default, #c9d1d9);
+  cursor: pointer;
+}
+.app-row:hover { color: var(--accent-fg, #58a6ff); }
+
+/* ── Apps widget: view switcher, filter, internal scroll ─────────────────── */
+
+/* Lives in the widget header now, so it neither spans the full width nor needs
+   a margin under it — that margin was a whole row of gutter height. */
+.seg {
+  display: flex;
+  gap: 2px;
+}
+.seg-btn {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: 1px solid var(--border-default, #30363d);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.seg-btn:hover { color: var(--fg-default, #c9d1d9); }
+.seg-btn.on {
+  color: var(--accent-fg, #58a6ff);
+  border-color: var(--accent-fg, #58a6ff);
+}
+
+.apps-filter {
+  width: 100%;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  margin-bottom: 4px;
+  padding: 1px 5px;
+  font: inherit;
+  font-size: 11px;
+  color: var(--fg-default, #c9d1d9);
+  background: var(--surface-canvas, #0d1117);
+  border: 1px solid var(--border-default, #30363d);
+  border-radius: 4px;
+}
+.apps-filter:focus {
+  outline: none;
+  border-color: var(--accent-fg, #58a6ff);
+}
+
+/* The pinned current repo sits outside the scroller so it never scrolls away. */
+.apps-current {
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-default, #30363d);
+}
+
+.apps-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.widget .row.section-label {
+  margin-top: 4px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.widget .row.hint { font-style: italic; padding-top: 4px; }
+
+/* A row is two controls: pick (re-point the widgets) and open-here (move the
+   terminals). The destructive one is deliberately smaller and unlabeled. */
+.app-row-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.app-row-wrap .app-row { flex: 1 1 auto; min-width: 0; }
+
+.open-here {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+}
+.app-row-wrap:hover .open-here,
+.open-here:focus-visible { opacity: 1; }
+.open-here:hover { color: var(--accent-fg, #58a6ff); border-color: var(--border-default, #30363d); }
+/* Armed: always visible and clearly a second, different click. */
+.open-here.arming {
+  opacity: 1;
+  color: var(--accent-fg, #58a6ff);
+  border-color: var(--accent-fg, #58a6ff);
+}
+
+/* ── Settings modal ──────────────────────────────────────────────────────── */
+
+/* A sibling of .grid, not a wrapper — the grid stays mounted underneath, so
+   opening settings never disposes a TerminalPane. Fixed rather than absolute so
+   it covers the app bar too. */
+.settings-backdrop {
+  position: fixed;
+  inset: 0;
+  /* Top of the stack: panes (1) < launch screen (50) < app bar (60) < this.
+     The bar is above the launch screen so its controls stay usable during
+     startup, which means anything meant to cover the BAR has to clear 60 —
+     this was 10, and covering the bar is the documented reason it is fixed
+     rather than absolute. Guarded in tests/appbar-css.test.ts. */
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0 0 0 / 45%);
+}
+
+.settings-dialog {
+  position: relative;
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  width: min(640px, 90vw);
+  height: min(420px, 80vh);
+  background: var(--surface-card, #161b22);
+  border: 1px solid var(--border-default, #30363d);
+  border-radius: 8px;
+  font-size: 11px;
+  overflow: hidden;
+}
+.settings-dialog:focus { outline: none; }
+
+.settings-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 10px 6px;
+  border-inline-end: 1px solid var(--border-default, #30363d);
+  background: var(--surface-canvas, #0d1117);
+}
+.settings-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 8px;
+  font: inherit;
+  text-align: left;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+/* Reserved whether or not the section supplied an icon, so labels stay on one
+   x — same reason react-ui's overflow menu reserves its icon column. The glyphs
+   are `currentColor`, so they follow the item's muted/hover/active color with no
+   rule of their own. */
+.settings-nav-icon {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.settings-nav-item:hover { color: var(--fg-default, #c9d1d9); }
+.settings-nav-item.on {
+  color: var(--accent-fg, #58a6ff);
+  background: var(--surface-card, #161b22);
+  font-weight: 600;
+}
+
+.settings-panel {
+  min-width: 0;
+  padding: 14px 16px;
+  overflow-y: auto;
+  color: var(--fg-default, #c9d1d9);
+}
+
+.settings-close {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  padding: 0 4px;
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+.settings-close:hover { color: var(--accent-fg, #58a6ff); border-color: var(--border-default, #30363d); }
+
+.settings-section { display: flex; flex-direction: column; gap: 10px; }
+.settings-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.settings-row button,
+.settings-row select,
+.settings-row input {
+  font: inherit;
+  font-size: 11px;
+  padding: 2px 6px;
+  color: var(--fg-default, #c9d1d9);
+  background: var(--surface-canvas, #0d1117);
+  border: 1px solid var(--border-default, #30363d);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.settings-row input { cursor: text; }
+.settings-row button:hover:not(:disabled) { color: var(--accent-fg, #58a6ff); border-color: var(--accent-fg, #58a6ff); }
+.settings-row button:disabled { opacity: 0.4; cursor: default; }
+
+/* The live layout is deliberately not the active preset, so drift has to be
+   visible — otherwise Save looks like a button that does nothing. */
+.settings-dirty {
+  color: var(--accent-fg, #58a6ff);
+  font-style: italic;
+}
+.settings-hint { margin: 0; color: var(--fg-muted, #8b949e); font-style: italic; }
+
+.settings-group { display: flex; flex-direction: column; gap: 3px; }
+.settings-group h6 {
+  margin: 6px 0 2px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-muted, #8b949e);
+}
+.settings-slot { display: flex; align-items: center; gap: 6px; }
+.settings-slot-label { flex: 1 1 auto; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.settings-slot button {
+  font: inherit;
+  font-size: 9px;
+  padding: 0 5px;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: 1px solid var(--border-default, #30363d);
+  border-radius: 3px;
+  cursor: pointer;
+}
+.settings-slot button:disabled { opacity: 0.3; cursor: default; }
+
+.settings-about-label { flex: 0 0 90px; color: var(--fg-muted, #8b949e); }
+.settings-about-value { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* A version that opens its GitHub page. A button, not an anchor — a real
+   navigation in this renderer fires did-start-navigation, which main wires to
+   killAll, so a plain link here would take out every pty. Styled to read as a
+   link anyway, because that is what it behaves like. */
+.settings-about-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: var(--accent-fg, var(--ds-accent-fg, #58a6ff));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.settings-about-link:hover { text-decoration-thickness: 2px; }
+
+/* A button in a settings row that leads with a glyph. `gap` rather than a margin
+   on the svg so a label-only button in the same row is unaffected. */
+.settings-row button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.settings-row button.on {
+  color: var(--accent-fg, #58a6ff);
+  border-color: var(--accent-fg, #58a6ff);
+}
+
+/* ── Appearance: the theme list ──────────────────────────────────────────── */
+
+/* An inline list, not the app bar's flyout: this panel has room, and a settings
+   dialog is where you go to browse rather than to flip one switch. The library
+   is unbounded (whatever sbrain_config.themes holds), so it scrolls with the
+   panel around it. */
+.theme-list { display: flex; flex-direction: column; gap: 1px; }
+
+.theme-group {
+  margin: 5px 0 2px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-muted, #8b949e);
+  opacity: 0.75;
+}
+.theme-group:first-child { margin-top: 0; }
+
+.theme-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 3px 6px;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.theme-row:hover { color: var(--fg-default, #c9d1d9); border-color: var(--border-default, #30363d); }
+/* The selected row keeps its accent border on hover — otherwise moving the
+   pointer down the list makes the current theme indistinguishable from the one
+   under the cursor. */
+.theme-row.on,
+.theme-row.on:hover {
+  color: var(--accent-fg, #58a6ff);
+  border-color: var(--accent-fg, #58a6ff);
+  font-weight: 600;
+}
+.theme-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Tab strip (rendered into the AppBar's actions slot) ─────────────────── */
+
+/* The whole app bar is a drag region and @devkit-inc/react-ui only exempts its
+   own buttons — without no-drag here, clicking a tab drags the window instead
+   of switching tabs.
+
+   `align-self: stretch` is what makes the tabs FILL the bar rather than float in
+   the middle of it. `.ds-appbar` is `align-items: center`, so every child it is
+   handed — this strip included — is shrink-to-fit and vertically centered, which
+   is what read as padding above and below the tabs: it was never padding, it was
+   the leftover bar height. Stretching claims the full 32px, so a tab's hit area
+   runs from the top pixel of the window to the bar's bottom border (Fitts's law:
+   the top edge is a target you cannot overshoot with a maximized window).
+
+   `flex: 0 1 auto` + `overflow: hidden` bound the strip. It now has a sibling —
+   the gear — and an unbounded strip with a dozen tabs would push it, the zoom
+   readout and the window controls off the right edge. Tabs past the edge are
+   clipped rather than shoving the ✕ out of reach; Ctrl+Tab still gets to them. */
+/* The tab strip sits out the launch. Every target in it — switch, close, new
+   tab — has to reach main, which is blocked inside nodePty.spawn for the whole
+   startup, so painting a tab and a ＋ over the launch screen offers controls
+   that silently do nothing. The brand (settings) and the window controls stay,
+   because those DO work: settings is renderer-only, and minimize/maximize/close
+   go through the window manager. */
+.app.launching .tabstrip {
+  display: none;
+}
+
+.tabstrip {
+  display: flex;
+  align-self: stretch;
+  align-items: stretch;
+  flex: 0 1 auto;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  -webkit-app-region: no-drag;
+}
+
+/* Square and flush, the way every browser and Windows Terminal draws a tab that
+   meets the top of the window — a rounded, inset pill cannot touch the edge by
+   definition. The active marker is an INSET SHADOW, not a border: a 1px border
+   would take a pixel off the bar's height at the top and reintroduce exactly the
+   gap this change removes. It sits on the bottom edge, against the bar's own
+   border, so it reads as the tab owning the panes below it.
+
+   NO ring. An earlier version drew a three-sided 1px outline on every tab and a
+   brighter one on the active tab; the active tab was then a boxed-in cell in a
+   row of boxed-in cells, which is a lot of furniture to say something the fill,
+   the accent underline and the accent label already say three times over. What
+   is left is one hairline between neighbours — enough to see where one tab ends
+   — carried on the RIGHT edge only, so no two tabs can contribute a double-weight
+   seam and there is nothing to collapse with a negative margin.
+
+   Everything that survives is color: the active tab's raised fill, its 2px accent
+   underline and its accent label; a ready tab's green dot. */
+.tab {
+  display: flex;
+  align-items: center;
+  max-width: 180px;
+  /* A floor, not 0: the ✕ overlays the label's right end (see `.tab-close`), so
+     a tab allowed to shrink arbitrarily would have nothing left to show. Past
+     this width the strip clips rather than shrinks — the same trade its
+     `overflow: hidden` already makes. */
+  min-width: 110px;
+  border: none;
+  border-radius: 0;
+  position: relative;
+  box-shadow: inset -1px 0 0 var(--border-default, #30363d);
+}
+/* The strip's own right end is the ＋ button, not a tab edge, so the last tab
+   keeps its hairline: it is the seam against the ＋, not a stray outer border. */
+.tab:hover { background: var(--surface-hover, #21262d); }
+.tab.on {
+  z-index: 1;
+  background: var(--surface-card, #161b22);
+  box-shadow:
+    inset -1px 0 0 var(--border-default, #30363d),
+    inset 0 -2px 0 var(--accent-fg, #58a6ff);
+}
+
+/* ── "This session wants you back" ────────────────────────────────────────
+   Set when a pane rings the terminal bell while you are not watching that tab
+   (App.onBell); cleared the moment you switch to it. Two carriers, because one
+   is never enough: the ring pulses (motion, which is what catches a glance
+   across the strip) and a dot appears beside the label (static, still there
+   after the animation is suppressed or if you are looking straight at it).
+
+   Both carriers now ride the DOT rather than a ring around the tab: the rings
+   are gone (see `.tab` above), and re-introducing one only for this state would
+   put back the heaviest piece of the furniture that was just removed. The dot is
+   green (color), it pulses (motion), and the label turns green with it — three
+   signals inside the tab instead of a box drawn around it. Opacity is what
+   animates, because it composites without a layout pass. */
+.tab.ready { z-index: 1; }
+.tab.ready .tab-label { color: var(--ready-fg, #3fb950); }
+.tab.ready .tab-dot {
+  animation: tab-ready-pulse 1.8s ease-in-out infinite;
+}
+@keyframes tab-ready-pulse {
+  50% { opacity: 0.2; }
+}
+
+/* Inline-block with `vertical-align: middle`, NOT a flex item: `.tab-label` is
+   a block whose `text-overflow: ellipsis` truncates the label, and turning it
+   into a flex container to place this would make the text an anonymous flex
+   item and kill the ellipsis. In the inline flow the dot simply sits in front
+   of the text and the truncation still works. */
+.tab-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--ready-fg, #3fb950);
+}
+
+/* Motion is the one carrier that can be genuinely unpleasant, so it is the one
+   that goes. The dot and the green label stay: the state must still be visible. */
+@media (prefers-reduced-motion: reduce) {
+  .tab.ready .tab-dot { animation: none; }
+}
+
+.tab-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* No vertical padding: the flex row centers the text in the full bar height,
+     and a block padding here would only fight it.
+
+     The right inset is CONSTANT — 6px for the ✕'s own offset + its 17px box + 4px
+     of air — and deliberately not applied only while the ✕ is showing. A tab is
+     sized by its content between `min-width` and `max-width`, so a padding that
+     appeared on hover grew the whole tab under the pointer (and shoved its
+     neighbours along the strip) at the exact moment the user was aiming at
+     something inside it. Reserving the corner up front costs a mid-length label
+     ~27px of text and buys a tab whose geometry never moves. */
+  padding: 0 27px 0 12px;
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: none;
+  cursor: pointer;
+  align-self: stretch;
+}
+.tab.on .tab-label { color: var(--accent-fg, #58a6ff); font-weight: 600; }
+
+/* Restored but never activated — its panes were never spawned. Reuses the
+   app's existing disabled-text treatment (.settings-row button:disabled)
+   rather than inventing a new "not yet" language: the tab isn't broken, it's
+   just dormant. */
+.tab-dormant .tab-label { opacity: 0.4; }
+
+/* A restored tab whose cwd is gone from disk (project:exists said no).
+   Deliberately the theme's error/danger token, not the ready dot's green —
+   the dot means "this tab has news for you"; this means the opposite, that
+   there is nowhere left to spawn into. Full opacity, overriding
+   `.tab-dormant` above (a missing tab is always dormant too, but should read
+   as an error, not merely "not booted yet"). */
+.tab-missing .tab-label { color: var(--danger-fg, #f85149); opacity: 1; }
+
+/* Windows Terminal shows the close affordance on the active and hovered tab
+   only. Presence is logic (hidden entirely on a lone tab); this is visibility.
+
+   ABSOLUTE, not a flex item. As a sibling in the row it reserved its width on
+   every tab whether or not it was drawn, which cost the label ~24px it could
+   have been using and pinned the glyph hard against the tab's right edge with
+   the dead reserve sitting to its LEFT — space on the wrong side of the button.
+   Out of flow, the label runs the full width of a resting tab and the ✕ floats
+   over its tail end only when it is visible; `.tab-label`'s right inset below
+   pulls the text back so the two never overlap. A fixed square rather than
+   padding so the box is symmetric about the glyph, and `right`/`inset-block`
+   give it the same breathing room on the right that it has on the left. */
+.tab-close {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  padding: 0;
+  font: inherit;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  opacity: 0;
+  /* Not click-through while invisible: an unhovered tab's right end is label,
+     and clicking what looks like the label must select the tab, not close it. */
+  pointer-events: none;
+}
+.tab.on .tab-close,
+.tab:hover .tab-close,
+.tab-close:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.tab-close:hover { color: var(--accent-fg, #58a6ff); border-color: var(--border-default, #30363d); }
+/* Armed: always visible and clearly a second, different click — same treatment
+   as the Apps widget's open-here confirm. A solid fill rather than a recolor,
+   because the pointer is still on the button when this appears and
+   `.tab-close:hover` already paints the glyph accent-colored — a border hue is
+   not a state change anyone can see. */
+.tab-close.arming,
+.tab-close.arming:hover {
+  opacity: 1;
+  pointer-events: auto;
+  /* --surface-canvas, not the --surface-page this used to name: nothing ever
+     defined that token, so the glyph was pinned to the hardcoded dark fallback
+     and stayed near-black on a light theme's blue fill. The alias resolves to
+     white there and to #0d1117 in the dark themes — the same result as before
+     where it was already right. */
+  color: var(--surface-canvas, #0d1117);
+  background: var(--accent-fg, #58a6ff);
+  border-color: var(--accent-fg, #58a6ff);
+}
+
+.tab-new {
+  flex: 0 0 auto;
+  align-self: stretch;
+  padding: 0 9px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--fg-muted, #8b949e);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.tab-new:hover { color: var(--fg-default, #c9d1d9); background: var(--surface-hover, #21262d); }
+
+/* ── The wordmark, which is the settings button ──────────────────────────── */
+
+/* react-ui renders the `brand` prop as a <span> inside the bar's drag region.
+   A wordmark you can click has to be a real <button> that opts out of dragging,
+   and neither is something a prop can change from here — so that span is hidden
+   and App renders its own in the actions slot. Hidden rather than fed an empty
+   brand: in a dev window AppBar appends " (dev)" to whatever it is given, so an
+   empty string would leave a stray "(dev)" floating at the left edge. */
+.ds-appbar-brand { display: none; }
+
+/* Zeroed so the wordmark can be corner-flush, with the 12px inset moved onto the
+   button's own padding: the text sits exactly where it did, but the button's hit
+   area and hover fill now run to the window edge. Same reasoning react-ui
+   already applies to the window controls at the other end of the bar — on a
+   maximized window a corner is a target you cannot overshoot. */
+.ds-appbar {
+  /* Out-stacks .loading-screen (z-index 50) so the window controls stay usable
+     while the launch screen is up. Needs `position` to take a z-index at all —
+     react-ui leaves the bar static. Guarded in tests/appbar-css.test.ts, because
+     the two numbers live in different rules and only matter relative to each
+     other. */
+  position: relative;
+  z-index: 60;
+  padding-left: 0;
+  /* Hold the bar at its 32px design size, the same height sbrain-desktop's bar
+     renders at — do NOT let it ride the page zoom.
+
+     appbar.css computes `zoom: var(--ds-zoom-neutral, 1) / var(--ds-page-factor, 1)`.
+     bezel's home zoom is 1.25 (registerZoom neutral in electron/main.ts), so at
+     home BOTH vars are 1.25, they cancel to `zoom: 1`, and the 32px bar is then
+     scaled by Chromium's 1.25 page zoom to 40 physical px — a bar 25% taller
+     than every other app on this react-ui. Pinning the numerator at 1 makes the
+     bar counter-scale instead: 32 x (1/1.25) x 1.25 = 32px at any zoom level,
+     which is what sbrain gets for free at neutral 1. The tabs and wordmark
+     inside shrink with it, which is the point — they should read at sbrain's
+     size, not the pane text's. */
+  zoom: calc(1 / var(--ds-page-factor, 1));
+}
+
+.appbar-brand {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  /* Asymmetric on purpose, but generous on both sides: the wordmark is the one
+     piece of identity in the bar and at 12/4 it was wedged between the window
+     edge and the first tab with no room to read as its own thing. 16px on the
+     left is the window-edge inset (still a corner-flush hit area — the padding is
+     inside the button, see `.ds-appbar`); 12px on the right separates it from the
+     tab strip. That gap is still hoverable brand rather than dead bar, so the
+     active tab's fill does not detach from it the way a real margin would. */
+  padding: 0 12px 0 16px;
+  /* react-ui's own `.ds-appbar-brand` type and color token, verbatim — this is a
+     replacement for that element, not a new piece of chrome, and it should be
+     indistinguishable from it until hovered. */
+  font: 12px/1 'SF Mono', 'Fira Code', monospace;
+  color: var(--ds-brand, var(--fg-muted, #8b949e));
+  background: none;
+  border: none;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+/* The only thing that says this is a control. Deliberately just the hover state:
+   a permanently highlighted brand would read as a selected tab. */
+.appbar-brand:hover { color: var(--fg-default, #c9d1d9); background: var(--surface-hover, #21262d); }
+
+/* ── Session widget ──────────────────────────────────────────────────────── */
+
+.session-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* The gutter's default `.row` is a single ellipsized line. This widget exists
+   precisely because the tab strip already truncates these summaries, so its
+   rows wrap to as many lines as the text needs. The selector must be
+   `.widget .row.session-entry` (not just `.widget .session-entry`) so its
+   specificity (0,3,0) EXCEEDS `.widget .row` (0,2,0) — a bare specificity tie
+   is broken only by source order, so reordering the stylesheet would
+   silently restore truncation. See test for regression guard. */
+.widget .row.session-entry {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  padding: 2px 0;
+}
+
+/* What claude is on RIGHT NOW, as a headline rather than the first item of a
+   flat list. The widget's own title says "Session"; this says what the session
+   is, which is the thing actually worth reading in the gutter. Sized up and
+   given room to breathe so the eye lands here first. */
+.widget .row.session-entry.current {
+  padding: 0 0 5px;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+/* Everything before it, demoted. The rule under the headline separates the two
+   registers once, instead of the per-row hairlines this list used to draw —
+   those gave every entry equal visual weight, which is the opposite of the
+   point. */
+.session-past {
+  padding-top: 5px;
+  border-top: 1px solid var(--border-default, #30363d);
+}
+.session-past-label {
+  margin-bottom: 2px;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--fg-muted, #8b949e);
+  opacity: 0.75;
+}
+/* The bullet is drawn, not typed: a literal "· " in the text would be read out
+   by a screen reader and would land in the string a copy grabs. */
+.widget .row.session-entry.past {
+  padding-left: 10px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--fg-muted, #8b949e);
+  position: relative;
+}
+.widget .row.session-entry.past::before {
+  content: '·';
+  position: absolute;
+  left: 2px;
+}
+
+/* ── Gauges: Window + Usage ──────────────────────────────────────────────── */
+
+/* Severity is carried on the wrapper and read by the fill, so a bar's colour is
+   one decision made in src/usage.ts (severityOf, or the server's own severity)
+   rather than a second, drifting one made in CSS. All three are semantic tokens
+   the theme registry genuinely defines; the literals are for the pre-first-paint
+   frame and for jsdom, exactly like --ready-fg above. */
+.meter {
+  --meter-fg: var(--ds-accent, #58a6ff);
+  padding: 2px 0 4px;
+}
+.meter[data-severity='warn'] { --meter-fg: var(--ds-warn-fg, #d29922); }
+.meter[data-severity='critical'] { --meter-fg: var(--ds-err-fg, #f85149); }
+
+.meter-head {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  margin-bottom: 3px;
+  line-height: 1.4;
+}
+.meter-label {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--fg-default, #c9d1d9);
+}
+/* Pushed against the percentage rather than the label: the countdown belongs to
+   the number, and letting it sit next to the label would make a long repo-ish
+   label truncate it instead of itself. */
+.meter-note {
+  flex: 0 1 auto;
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  font-size: 10px;
+  color: var(--fg-muted, #8b949e);
+}
+/* Tabular figures so the digits do not shuffle sideways as the number ticks. */
+.meter-pct {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+  color: var(--meter-fg);
+}
+/* No `margin-left: auto` here — .meter-note already claims the gap, and when it
+   is absent the percentage inherits that role via its own auto margin. */
+.meter-head > .meter-note + .meter-pct { margin-left: 0; }
+.meter-head > .meter-label + .meter-pct { margin-left: auto; }
+
+.meter-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--ds-border-dim, #21262d);
+  overflow: hidden;
+}
+.meter-fill {
+  height: 100%;
+  background: var(--meter-fg);
+  border-radius: 2px;
+  /* Percentages arrive in steps (one per assistant turn, one per poll), so the
+     bar slides to the new value instead of jumping — which is what makes a
+     glance register as "it moved" rather than "it is different now". */
+  transition: width 240ms ease-out, background 240ms linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .meter-fill { transition: none; }
+}
+
+/* ── Context widget: the on-demand repo switcher ─────────────────────────── */
+
+/* A panel, not a popover: it pushes the widget taller inside its own slot,
+   which the gutter already knows how to size and scroll. An overlay would have
+   to escape .widget's overflow and would cover the very rows it is changing. */
+.repo-switcher {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-default, #30363d);
+}
+/* Bounded so opening the switcher in an `auto` slot cannot push the widgets
+   below it out of the gutter; the list scrolls internally past that. */
+.repo-switcher .apps-list { max-height: 40vh; }
+/* ── Launch screen ────────────────────────────────────────────────────────────
+   Covers the shell from first paint until both of the first tab's panes have
+   live ptys. It exists because main blocks inside a synchronous nodePty.spawn
+   for ~8s on this machine, during which bezel used to paint its whole UI and
+   then ignore every click.
+
+   All of this runs in the renderer, a SEPARATE process from the blocked one, so
+   the animations below keep running smoothly throughout the freeze. Tokens with
+   literal fallbacks, matching the rest of this file, so the screen is never
+   unstyled even on the very first paint before a theme resolves. */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  /* Above the panes, BELOW the app bar. The panes mount underneath and spawn
+     their ptys — that round-trip is what dismisses this.
+
+     The bar is the one thing that must stay on top. This used to be above it
+     too, and since the screen covers the window for the whole ~8s launch, that
+     left no way to minimize, maximize or close during startup — the drag region
+     below moved the window, and nothing else worked. The bar is opaque and 32px,
+     so letting it sit above costs the screen nothing visually. */
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: var(--surface-canvas, #0d1117);
+  /* NOT a drag region, despite covering the window.
+     `-webkit-app-region: drag` is an OS-level declaration, not a CSS paint one:
+     it tells Windows this area is titlebar, and the window manager then eats
+     the clicks before the renderer ever sees them. On a fixed, inset:0 overlay
+     that meant the WHOLE window was titlebar for the entire launch, so
+     minimize/maximize/close rendered normally and did nothing when clicked —
+     out-stacking the overlay could never have fixed that, because z-index is
+     about painting and this is about input.
+     The window is still draggable by the app bar above, which is where you drag
+     an app from anyway. */
+  -webkit-app-region: no-drag;
+  animation: loading-screen-in 120ms ease-out;
+}
+
+.loading-screen-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 0 32px;
+  text-align: center;
+  -webkit-app-region: no-drag;
+}
+
+.loading-brand {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--fg-default, #e6edf3);
+  opacity: 0.92;
+}
+
+.loading-message {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  min-height: 1.4em;
+  font-size: 13px;
+  color: var(--fg-muted, #8b949e);
+  /* Remounted on every rotation (keyed by index in LoadingScreen.tsx), so this
+     replays as a fade-in for each new line rather than a hard swap. */
+  animation: loading-message-in 260ms ease-out;
+}
+
+.loading-detail {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted, #8b949e);
+  opacity: 0.6;
+}
+
+/* Three dots that fill in over ~1.2s. Purely decorative and aria-hidden — the
+   message itself is what a screen reader announces. */
+.loading-dots {
+  display: inline-flex;
+  gap: 2px;
+}
+.loading-dots i {
+  width: 3px;
+  height: 3px;
+  margin-bottom: 2px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.25;
+  animation: loading-dot 1.2s infinite ease-in-out;
+}
+.loading-dots i:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots i:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes loading-screen-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes loading-message-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes loading-dot {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}
+
+/* The rotating text still carries the "something is happening" signal, so
+   removing the motion costs nothing. */
+@media (prefers-reduced-motion: reduce) {
+  .loading-screen,
+  .loading-message,
+  .loading-dots i {
+    animation: none;
+  }
+  .loading-dots i { opacity: 0.6; }
+}

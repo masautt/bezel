@@ -1,0 +1,10 @@
+{
+  "extends": "@devkit-inc/electron-ui/tsconfig.client.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "baseUrl": "..",
+    "paths": { "@shared/*": ["src/*"] },
+    "types": ["vite/client"]
+  },
+  "include": ["src/**/*", "../src/**/*"]
+}

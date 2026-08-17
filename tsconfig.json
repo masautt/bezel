@@ -1,0 +1,9 @@
+{
+  "extends": "@devkit-inc/electron-ui/tsconfig.base.json",
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": { "@shared/*": ["src/*"] }
+  },
+  "include": ["src/**/*"]
+}

@@ -1,0 +1,90 @@
+{
+  "name": "@devkit-inc/electron-ui",
+  "version": "2.6.0",
+  "description": "Focused Electron app toolkit: window factory, window-control IPC, a free-port helper, a dev-server hook, a preload bridge helper, and shared build-configs. (Shared React moved to @devkit-inc/react-ui.)",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devkit-inc/electron-ui.git"
+  },
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js"
+    },
+    "./preload": {
+      "types": "./dist/preload.d.ts",
+      "import": "./dist/preload.js",
+      "require": "./dist/preload.js"
+    },
+    "./tsconfig.base.json": "./tsconfig.base.json",
+    "./tsconfig.node.json": "./tsconfig.node.json",
+    "./tsconfig.client.json": "./tsconfig.client.json",
+    "./eslint": "./eslint-config-base.cjs",
+    "./eslint-react": "./eslint-config-react.cjs",
+    "./prettier": "./prettier.config.cjs",
+    "./vitest": {
+      "types": "./dist/vitest/index.d.ts",
+      "import": "./dist/vitest/index.js",
+      "require": "./dist/vitest/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js",
+      "require": "./dist/vite.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "import": "./dist/server.js",
+      "require": "./dist/server.js"
+    },
+    "./afterpack": "./afterpack.cjs"
+  },
+  "files": [
+    "dist",
+    "scripts",
+    "tsconfig.base.json",
+    "tsconfig.node.json",
+    "tsconfig.client.json",
+    "eslint-config-base.cjs",
+    "eslint-config-react.cjs",
+    "prettier.config.cjs",
+    "afterpack.cjs"
+  ],
+  "scripts": {
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc",
+    "test": "vitest run",
+    "lint": "eslint src --ext .ts,.tsx",
+    "prepublishOnly": "npm run build && npm test",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx}\""
+  },
+  "dependencies": {
+    "@electron/asar": "^3.4.0",
+    "@typescript-eslint/eslint-plugin": "^8.60.1",
+    "@typescript-eslint/parser": "^8.60.1",
+    "eslint-plugin-react-hooks": "^5.2.0"
+  },
+  "peerDependencies": {
+    "electron": ">=33"
+  },
+  "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
+    "access": "restricted"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.25",
+    "@types/node": "^25.9.3",
+    "electron": "^41.7.1",
+    "eslint": "^8.57.1",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9",
+    "prettier": "^3.8.3"
+  }
+}

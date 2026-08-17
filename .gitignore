@@ -1,0 +1,10 @@
+node_modules/
+
+# Anchored to the repo root on purpose: an unanchored `dist/` also matches
+# `vendor/@devkit-inc/*/dist/`, which is the vendored packages' entire shipped
+# output. Leaving it unanchored publishes three empty packages and breaks the
+# build for anyone cloning this repo.
+/dist/
+/dist-electron/
+/release/
+/.config/
